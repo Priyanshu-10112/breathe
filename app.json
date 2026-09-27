@@ -34,7 +34,7 @@
       "expo-av",
       "expo-document-picker",
       "expo-file-system",
-      "@shopify/react-native-skia"
+      "./plugins/with-skia"
     ],
     "experiments": {
       "typedRoutes": true

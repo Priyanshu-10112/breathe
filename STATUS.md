@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-27
 
+## ✅ APK rebuilt — install `breathe-prod-v2.apk`
+
+**Root cause:** `index.ts` imported the template stub `App.tsx` (`"Open up App.tsx to start working on your app!"`) instead of the real Expo Router entry point at `app/_layout.tsx`. The production APK was bundled from that stub, so it rendered a blank template screen and immediately closed on the device.
+
+**Fix:** `index.ts` now imports `./app/_layout` (the real root layout with `Stack` → `SafeAreaProvider` → `ThemeProvider` → `(tabs)` navigator).
+
+**Verification:**
+- `npx tsc --noEmit` — passes
+- Old `breathe-prod.apk` bundle (1.1 MB): contains `"Open up App.tsx"`, **no** `expo-router` / `RootLayout` / `SafeAreaProvider` / `expo-av` → template stub
+- New `breathe-prod-v2.apk` bundle (3.0 MB): contains `expo-router`, `RootLayout`, `SafeAreaProvider`, `Tabs`, `Stack`, `ThemeProvider`, `expo-av`, `setAudioModeAsync`, `registerRootComponent` → **real app**
+
+**Other APKs:**
+- `breathe.apk` (320 MB) — debug build, no bundled JS, needs Metro dev server on `localhost:8081`. Delete it.
+- `breathe-prod.apk` (141 MB) — broken template build. Delete it, use `breathe-prod-v2.apk`.
+
 ## App overview
 Personal stress-relief mobile app. Expo (SDK 57) + Expo Router + Tailwind/nativewind.
 Folder: `C:\Users\lenovo\Desktop\SIH\APP`
