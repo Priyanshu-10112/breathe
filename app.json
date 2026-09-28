@@ -34,7 +34,6 @@
       "expo-av",
       "expo-document-picker",
       "expo-file-system",
-      "./plugins/with-skia"
     ],
     "experiments": {
       "typedRoutes": true

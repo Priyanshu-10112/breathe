@@ -1,4 +1,4 @@
-const { withAndroidManifest, withGradleProperties, withAppBuildGradle } = require('@expo/config-plugins');
+const { withAndroidManifest, withGradleProperties, withSettingsGradle } = require('@expo/config-plugins');
 
 const withSkia = (config) => {
   config = withAndroidManifest(config, (config) => {
@@ -23,7 +23,7 @@ const withSkia = (config) => {
     return config;
   });
 
-  config = withAppBuildGradle(config, (config) => {
+  config = withSettingsGradle(config, (config) => {
     if (!config.modResults.contents.includes('react-native-skia')) {
       const skiaGradle = `
 // Skia
