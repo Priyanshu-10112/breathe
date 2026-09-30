@@ -16,6 +16,11 @@ export default function AudioScreen() {
   const [uploading, setUploading] = useState(false)
   const { state, load, toggle, seek, setLooping, setVolume, stop } = useAudioPlayer()
 
+  const loadLibrary = async () => {
+    const tracks = await readAudioLibrary()
+    setLibrary(tracks)
+  }
+
   useEffect(() => {
     loadLibrary()
     // Set audio mode for background playback
@@ -25,11 +30,6 @@ export default function AudioScreen() {
       interruptionModeIOS: 0, // MixWithOthers
     }).catch(() => {})
   }, [])
-
-  const loadLibrary = async () => {
-    const tracks = await readAudioLibrary()
-    setLibrary(tracks)
-  }
 
   const handlePresetPress = async (preset: typeof PRESETS[0]) => {
     const track = library.find((t) => t.kind === 'preset' && t.presetId === preset.id)

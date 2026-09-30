@@ -5,17 +5,22 @@ import { Canvas, Path, Group, Skia, vec, Paint, useCanvasRef, useCanvasSize } fr
 import { readDrawingIndex, writeDrawingIndex, upsertDrawingPage, deleteDrawingPage, DrawingPage, DrawingStroke } from '../../data/storage'
 import { colors, s } from '../../theme'
 
+let idCounter = 0
+const newStrokeId = () => `s${Date.now().toString(36)}${(idCounter++).toString(36)}`
+
+const initialStroke: DrawingStroke = {
+  id: newStrokeId(),
+  points: [],
+  color: '#c85a3c',
+  size: 8,
+  opacity: 1,
+}
+
 export default function DrawScreen() {
   const [pages, setPages] = useState<DrawingPage[]>([])
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [isDrawing, setIsDrawing] = useState(false)
-  const [stroke, setStroke] = useState<DrawingStroke>({
-    id: Date.now().toString(),
-    points: [],
-    color: '#c85a3c',
-    size: 8,
-    opacity: 1,
-  })
+  const [stroke, setStroke] = useState<DrawingStroke>(initialStroke)
   const [color, setColor] = useState('#c85a3c')
   const [size, setSize] = useState(8)
   const [opacity, setOpacity] = useState(1)
@@ -41,7 +46,7 @@ export default function DrawScreen() {
 
   const clearCanvas = async () => {
     setStroke({
-      id: Date.now().toString(),
+      id: newStrokeId(),
       points: [],
       color,
       size,
@@ -77,7 +82,7 @@ export default function DrawScreen() {
 
   const savePage = async () => {
     const newPage: DrawingPage = {
-      id: Date.now().toString(),
+      id: newStrokeId(),
       strokes: [stroke],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -87,7 +92,7 @@ export default function DrawScreen() {
     setPages(idx.pages)
     setCurrentPageIndex(idx.pages.length - 1)
     setStroke({
-      id: Date.now().toString(),
+      id: newStrokeId(),
       points: [],
       color,
       size,
@@ -140,7 +145,7 @@ export default function DrawScreen() {
         // If no existing page, create a new one
         if (!pages[currentPageIndex]) {
           await upsertDrawingPage({
-            id: Date.now().toString(),
+            id: newStrokeId(),
             strokes: [newStroke],
             createdAt: Date.now(),
             updatedAt: Date.now()
@@ -164,7 +169,7 @@ export default function DrawScreen() {
     }
   }
 
-  const currentPage = pages[currentPageIndex] || { id: '', strokes: [], createdAt: Date.now(), updatedAt: Date.now() }
+  const currentPage = pages[currentPageIndex] || { id: '', strokes: [], createdAt: 0, updatedAt: 0 }
 
   return (
     <View style={styles.screen}>

@@ -33,8 +33,9 @@ export default function BreatheScreen() {
     let phaseTimer = 0
 
     progress.value = 0
-    setPhaseIndex(0)
-    setSecondsLeft(totalSec)
+    // Use functional updates to avoid synchronous setState in effect
+    setPhaseIndex(() => 0)
+    setSecondsLeft(() => totalSec)
 
     const id = setInterval(() => {
       elapsed++
@@ -42,13 +43,13 @@ export default function BreatheScreen() {
       if (phaseTimer >= phaseDur) {
         phaseTimer = 0
         phase = (phase + 1) % PHASES.length
-        setPhaseIndex(phase)
+        setPhaseIndex(() => phase)
       }
       const p = phaseTimer / phaseDur
       progress.value = withTiming(p, { duration: 200 })
 
       const left = totalSec - elapsed
-      setSecondsLeft(Math.max(0, left))
+      setSecondsLeft(() => Math.max(0, left))
       if (left <= 0) {
         clearInterval(id)
         setRunning(false)
