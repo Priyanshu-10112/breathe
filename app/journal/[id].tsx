@@ -1,7 +1,19 @@
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Alert } from 'react-native'
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
 import { useState, useEffect } from 'react'
 import { useLocalSearchParams, router, Stack } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { readJson, writeJson, JOURNAL_KEY } from '../../data/storage'
+import { colors } from '../../theme'
 
 type Entry = { id: string; title: string; body: string; updatedAt: number }
 
@@ -13,24 +25,34 @@ export default function JournalEditor() {
 
   useEffect(() => {
     if (isNew) return
-    ;(async () => {
-      const entries = await readJson<Entry[]>(JOURNAL_KEY, [])
+    let active = true
+    readJson<Entry[]>(JOURNAL_KEY, []).then((entries) => {
+      if (!active) return
       const found = entries.find((e) => e.id === id)
       if (found) {
         setTitle(found.title)
         setBody(found.body)
       }
-    })()
+    })
+    return () => {
+      active = false
+    }
   }, [id, isNew])
 
+  const isValid = Boolean(title.trim() || body.trim())
+
   const save = async () => {
+    if (!isValid) return
     const entries = await readJson<Entry[]>(JOURNAL_KEY, [])
     let next: Entry[]
     if (isNew) {
-      next = [{ id: Date.now().toString(), title: title.trim(), body, updatedAt: Date.now() }, ...entries]
+      next = [
+        { id: Date.now().toString(), title: title.trim(), body: body.trim(), updatedAt: Date.now() },
+        ...entries,
+      ]
     } else {
       next = entries.map((e) =>
-        e.id === id ? { ...e, title: title.trim(), body, updatedAt: Date.now() } : e
+        e.id === id ? { ...e, title: title.trim(), body: body.trim(), updatedAt: Date.now() } : e
       )
     }
     await writeJson(JOURNAL_KEY, next)
@@ -39,9 +61,11 @@ export default function JournalEditor() {
 
   const remove = () => {
     Alert.alert('Delete entry?', 'This cannot be undone.', [
-      { text: 'Cancel' },
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete', onPress: async () => {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
           const entries = await readJson<Entry[]>(JOURNAL_KEY, [])
           await writeJson(JOURNAL_KEY, entries.filter((e) => e.id !== id))
           router.back()
@@ -51,49 +75,105 @@ export default function JournalEditor() {
   }
 
   return (
-    <View style={styles.screen}>
-      <Stack.Screen options={{ headerTitle: isNew ? 'New Entry' : 'Edit', headerBackTitle: 'Back' }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <TextInput
-          style={styles.titleInput}
-          placeholder="Title"
-          placeholderTextColor="#a99f91"
-          value={title}
-          onChangeText={setTitle}
-        />
-        <TextInput
-          style={styles.bodyInput}
-          placeholder="Write here…"
-          placeholderTextColor="#a99f91"
-          multiline
-          value={body}
-          onChangeText={setBody}
-          textAlignVertical="top"
-        />
-      </ScrollView>
-      <View style={styles.footer}>
-        {isNew ? null : (
-          <Pressable onPress={remove} style={styles.delBtn}>
-            <Text style={styles.delBtnText}>Delete</Text>
+    <SafeAreaView style={styles.screen} edges={['bottom', 'left', 'right']}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTitle: isNew ? 'New Entry' : 'Edit Entry',
+          headerBackTitle: 'Back',
+          headerStyle: { backgroundColor: colors.bgSoft },
+          headerTintColor: colors.ink,
+          headerTitleStyle: { fontWeight: '700' },
+        }}
+      />
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <TextInput
+            style={styles.titleInput}
+            placeholder="Title"
+            placeholderTextColor={colors.muted}
+            value={title}
+            onChangeText={setTitle}
+          />
+          <TextInput
+            style={styles.bodyInput}
+            placeholder="Write here…"
+            placeholderTextColor={colors.muted}
+            multiline
+            value={body}
+            onChangeText={setBody}
+            textAlignVertical="top"
+          />
+        </ScrollView>
+
+        <View style={styles.footer}>
+          {isNew ? (
+            <View style={styles.placeholder} />
+          ) : (
+            <Pressable onPress={remove} style={styles.delBtn}>
+              <Text style={styles.delBtnText}>Delete</Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={save}
+            disabled={!isValid}
+            style={[styles.saveBtn, !isValid && styles.saveBtnDisabled]}
+          >
+            <Text style={styles.saveBtnText}>Save</Text>
           </Pressable>
-        )}
-        <Pressable onPress={save} style={[styles.saveBtn, (!title.trim() && !body) && styles.saveBtnDisabled]}>
-          <Text style={styles.saveBtnText}>Save</Text>
-        </Pressable>
-      </View>
-    </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#f6f4f0' },
-  content: { padding: 20, gap: 14, paddingBottom: 100 },
-  titleInput: { fontSize: 24, fontWeight: '700', color: '#2b2622' },
-  bodyInput: { fontSize: 17, color: '#2b2622', lineHeight: 26, minHeight: 300 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderTopColor: '#ece7de', backgroundColor: '#f6f4f0' },
-  delBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f7dde3' },
-  delBtnText: { color: '#c85a6e', fontWeight: '700' },
-  saveBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: '#c85a3c' },
-  saveBtnDisabled: { opacity: 0.45 },
-  saveBtnText: { color: '#fff', fontWeight: '700' },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  keyboardContainer: { flex: 1 },
+  content: { padding: 20, gap: 14, flexGrow: 1 },
+  titleInput: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.ink,
+    paddingVertical: 8,
+  },
+  bodyInput: {
+    fontSize: 16,
+    color: colors.ink,
+    lineHeight: 24,
+    minHeight: 240,
+    paddingVertical: 8,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  placeholder: { width: 1 },
+  delBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.roseSoft,
+  },
+  delBtnText: { color: colors.rose, fontWeight: '700', fontSize: 15 },
+  saveBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.brand,
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText: { color: colors.white, fontWeight: '700', fontSize: 15 },
 })

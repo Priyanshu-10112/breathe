@@ -92,24 +92,35 @@ export type AudioTrack = {
   createdAt: number
 }
 
+export const DEFAULT_PRESET_TRACKS: AudioTrack[] = [
+  { id: 'preset_rain', name: 'Rain', kind: 'preset', presetId: 'rain', emoji: '🌧️', createdAt: 1 },
+  { id: 'preset_waves', name: 'Waves', kind: 'preset', presetId: 'waves', emoji: '🌊', createdAt: 2 },
+  { id: 'preset_bowl', name: 'Singing Bowl', kind: 'preset', presetId: 'bowl', emoji: '🪔', createdAt: 3 },
+]
+
 export async function readAudioLibrary(): Promise<AudioTrack[]> {
-  return readJson<AudioTrack[]>(AUDIO_KEY, [])
+  const customTracks = await readJson<AudioTrack[]>(AUDIO_KEY, [])
+  const userUploads = customTracks.filter((t) => t.kind === 'upload')
+  return [...DEFAULT_PRESET_TRACKS, ...userUploads]
 }
 
 export async function writeAudioLibrary(tracks: AudioTrack[]): Promise<void> {
-  await writeJson(AUDIO_KEY, tracks)
+  const userUploads = tracks.filter((t) => t.kind === 'upload')
+  await writeJson(AUDIO_KEY, userUploads)
 }
 
 export async function addAudioTrack(track: AudioTrack): Promise<AudioTrack[]> {
-  const lib = await readAudioLibrary()
-  const next = [track, ...lib.filter((t) => t.id !== track.id)]
-  await writeAudioLibrary(next)
-  return next
+  const customTracks = await readJson<AudioTrack[]>(AUDIO_KEY, [])
+  const currentUploads = customTracks.filter((t) => t.kind === 'upload')
+  const nextUploads = [track, ...currentUploads.filter((t) => t.id !== track.id)]
+  await writeJson(AUDIO_KEY, nextUploads)
+  return [...DEFAULT_PRESET_TRACKS, ...nextUploads]
 }
 
 export async function removeAudioTrack(id: string): Promise<AudioTrack[]> {
-  const lib = await readAudioLibrary()
-  const next = lib.filter((t) => t.id !== id)
-  await writeAudioLibrary(next)
-  return next
+  const customTracks = await readJson<AudioTrack[]>(AUDIO_KEY, [])
+  const currentUploads = customTracks.filter((t) => t.kind === 'upload')
+  const nextUploads = currentUploads.filter((t) => t.id !== id)
+  await writeJson(AUDIO_KEY, nextUploads)
+  return [...DEFAULT_PRESET_TRACKS, ...nextUploads]
 }

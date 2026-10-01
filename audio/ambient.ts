@@ -3,7 +3,7 @@
 // Works on web (AudioContext) and is a no-op on native where we fall back
 // to the user's uploaded tracks only.
 
-type SoundType = 'rain' | 'waves' | 'bowl'
+export type SoundType = 'rain' | 'waves' | 'bowl'
 
 export interface AmbientTrack {
   id: SoundType
@@ -17,6 +17,12 @@ export const PRESETS: AmbientTrack[] = [
   { id: 'waves', name: 'Waves', emoji: '🌊', description: 'Soft ocean waves' },
   { id: 'bowl', name: 'Singing Bowl', emoji: '🪔', description: 'Resonant bowl tone' },
 ]
+
+export const PRESET_AUDIO_SOURCES: Record<SoundType, any> = {
+  rain: require('../assets/audio/rain.wav'),
+  waves: require('../assets/audio/waves.wav'),
+  bowl: require('../assets/audio/bowl.wav'),
+}
 
 let ctx: AudioContext | null = null
 let nodes: AudioNode[] = []

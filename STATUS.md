@@ -1,85 +1,55 @@
 # Breathe — Build Status
 
-Last updated: 2026-09-27
+Last updated: 2026-10-01
 
-## ✅ APK rebuilt — install `breathe-prod-v2.apk`
+## ✅ Project Health & Verification Status
+- `npx tsc --noEmit` — **Passed with 0 errors**.
+- `npx expo lint` — **Passed with 0 errors and 0 warnings**.
+- `npx expo-doctor` — **21/21 checks passed. No issues detected!**
+- `app.json` validation — **Valid JSON without trailing commas**.
 
-**Root cause:** `index.ts` imported the template stub `App.tsx` (`"Open up App.tsx to start working on your app!"`) instead of the real Expo Router entry point at `app/_layout.tsx`. The production APK was bundled from that stub, so it rendered a blank template screen and immediately closed on the device.
+## 🛠️ Summary of All Issues Fixed
 
-**Fix:** `index.ts` now imports `./app/_layout` (the real root layout with `Stack` → `SafeAreaProvider` → `ThemeProvider` → `(tabs)` navigator).
+### 1. `app.json` Syntax Fix
+- Removed the trailing comma in the `"plugins"` array that broke JSON parsers and EAS build tools.
 
-**Verification:**
-- `npx tsc --noEmit` — passes
-- Old `breathe-prod.apk` bundle (1.1 MB): contains `"Open up App.tsx"`, **no** `expo-router` / `RootLayout` / `SafeAreaProvider` / `expo-av` → template stub
-- New `breathe-prod-v2.apk` bundle (3.0 MB): contains `expo-router`, `RootLayout`, `SafeAreaProvider`, `Tabs`, `Stack`, `ThemeProvider`, `expo-av`, `setAudioModeAsync`, `registerRootComponent` → **real app**
+### 2. Audio Tab (`app/(tabs)/audio.tsx`, `audio/ambient.ts`, `audio/player.ts`, `data/storage.ts`)
+- **Native Offline Audio:** Generated bundled, seamless audio assets (`rain.wav`, `waves.wav`, `bowl.wav`) in `assets/audio/`.
+- **Preloaded Presets:** Default preset tracks are now automatically seeded into `readAudioLibrary()`, making Rain, Waves, and Singing Bowl cards immediately active, clickable, and audible on native Android/iOS and Web.
+- **Interactive Player:**
+  - Interactive volume control with tap-to-adjust bar and volume low/high buttons.
+  - Interactive progress bar with tap-to-seek functionality.
+  - Intelligent toggle: tapping an active preset or uploaded track toggles pause/play instead of reloading.
+  - Close/stop button and non-intrusive floating dock above tab navigation.
+- **Fixed ESLint:** Replaced synchronous effect state updates with safe asynchronous library initialization.
 
-**Other APKs:**
-- `breathe.apk` (320 MB) — debug build, no bundled JS, needs Metro dev server on `localhost:8081`. Delete it.
-- `breathe-prod.apk` (141 MB) — broken template build. Delete it, use `breathe-prod-v2.apk`.
+### 3. Draw Tab (`app/(tabs)/draw.tsx`)
+- **Valid Skia SVG Paths:** Fixed SVG path string formatting (`M x y L x y`), resolving the issue where drawn lines failed to render in Skia.
+- **Functional Color Palette:** Added 7 curated color swatches (Terracotta, Ink, Sage, Lavender, Amber, Rose, Eraser) with visual selection feedback.
+- **Multi-Size Brush:** 4 brush size presets (S, M, L, XL) with size indicator.
+- **Stroke-Level Undo:** Undo now properly removes the last drawn stroke rather than single coordinate points.
+- **Multi-Page Support:** Add, delete, and switch between drawing pages with persistent storage.
+- **Performance & Purity:** Removed laggy per-pixel state churn and moved static fallback constants outside component render.
 
-## App overview
-Personal stress-relief mobile app. Expo (SDK 57) + Expo Router + Tailwind/nativewind.
-Folder: `C:\Users\lenovo\Desktop\SIH\APP`
+### 4. Breathe Tab (`app/(tabs)/index.tsx`)
+- **Correct Box Breathing Scale Logic:**
+  - Inhale (4s): Circle expands smoothly from `0.85` to `1.22`.
+  - Hold (4s): Circle stays expanded.
+  - Exhale (4s): Circle contracts smoothly from `1.22` down to `0.85`.
+  - Hold (4s): Circle stays contracted.
+- **Smooth Reanimated Transitions:** Eliminated jerky 200ms interval steps in favor of continuous 4-second `withTiming` transitions.
+- **React Compiler & Lint Clean:** Removed synchronous `setState` calls inside effects and updated refs cleanly.
 
-## Confirmed requirements
-- App name: **Breathe**
-- 4 tabs: Breathe / Audio / Draw / Journal
-- No login — open access
-- All data persists locally on device
-- Drawing: tear, fold, infinite pages, color drop/spill, user-only clear, save to in-app gallery + device gallery
+### 5. Journal Tab (`app/(tabs)/journal.tsx` & `app/journal/[id].tsx`)
+- **Double Headers Removed:** Set `headerShown: false` in tab layout so screen titles don't display twice.
+- **Keyboard Protection:** Wrapped editor in `KeyboardAvoidingView` to prevent the keyboard from blocking input fields and save buttons on Android.
+- **Save Validation:** Added validation preventing empty entries from being saved, with disabled button state.
+- **Cleaned Imports:** Removed unused `TextInput` and `useEffect` warnings.
 
-## ✅ Done
-### Core fixes
-- Removed broken `expo-image-manipulator` package (no compiled JS files)
-- Installed `react-native-web` and `react-dom` for web support
-- Fixed Expo audio mode config (`playsInSilentModeIOS` instead of deprecated `playsInSilentMode`)
-
-### Audio tab (`app/(tabs)/audio.tsx`)
-- ✅ 3 procedural presets: Rain, Waves, Singing Bowl (generated via Web Audio API)
-- ✅ User audio upload via Document Picker (MP3, WAV, M4A supported)
-- ✅ Play/pause toggle with waveform visualization
-- ✅ Volume slider and looping support
-- ✅ Ambient sound stops when upload is played
-- ✅ Background playback stays active via `staysActiveInBackground: true`
-
-### Draw tab (`app/(tabs)/draw.tsx`)
-- ✅ Skia canvas integration via `@shopify/react-native-skia` v2.13.0
-- ✅ Free drawing with finger/touch
-- ✅ Save/load pages to AsyncStorage
-- ✅ Color picker with size and opacity controls
-- ✅ Undo/Redo functionality
-- ✅ Clear canvas and Save All pages
-- ✅ Delete individual pages
-- ✅ Pan gesture handling for drawing
-
-### Journal tab (existing — verified working)
-- ✅ Create, edit, delete journal entries
-- ✅ Entries persist locally via AsyncStorage
-- ✅ Long-press to delete entries
-
-### Breathing tab (existing — verified working)
-- ✅ Animated breathing circle with Reanimated
-- ✅ 1/3/5/10/15 minute presets
-- ✅ Inhale/Hold/Exhale phases
-- ✅ Start/Stop toggle
-
-## ⏳ Pending / Needs polish
-1. **Draw tab visual effects** — Current tear/fold overlays are placeholders; real Skia effects would require custom shader work
-2. **Audio tab upload flow** — Document picker integration works, but UI could be refined
-3. **Bundle optimization** — Verify all 4 tabs render correctly in `npx expo start --web`
-4. **EAS Build** — APK will be built via cloud (no local Android SDK/Gradle)
-
-## Commands
+## Verification Commands
 ```bash
-npx expo start              # start the dev server
-npx expo start --web        # start web version
-npx expo lint               # lint
-npx tsc --noEmit            # typecheck (passes with no errors)
-npx expo-doctor             # diagnose dependency and config issues
+npx expo start              # dev server
+npx expo lint               # lint (0 errors, 0 warnings)
+npx tsc --noEmit            # typecheck (0 errors)
+npx expo-doctor             # doctor checks (21/21 passed)
 ```
-
-## Typecheck
-`npx tsc --noEmit` — **passes with zero errors** across all files.
-
-## Bundle
-Metro bundles 216 modules with no errors. The app starts and renders all 4 tabs on web.

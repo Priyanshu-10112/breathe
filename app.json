@@ -33,7 +33,7 @@
       "expo-router",
       "expo-av",
       "expo-document-picker",
-      "expo-file-system",
+      "expo-file-system"
     ],
     "experiments": {
       "typedRoutes": true

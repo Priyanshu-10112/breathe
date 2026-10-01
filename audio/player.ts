@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Audio } from 'expo-av'
+import { Audio, AVPlaybackStatus } from 'expo-av'
 import { Alert } from 'react-native'
 import * as ambient from './ambient'
 import type { AudioTrack } from '../data/storage'
@@ -21,95 +21,89 @@ export function useAudioPlayer() {
     position: 0,
     duration: 0,
     volume: 1,
-    looping: false,
+    looping: true,
     isAmbient: false,
   })
 
   const soundRef = useRef<Audio.Sound | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
-  const loopingRef = useRef(false)
+  const loopingRef = useRef(true)
+  const volumeRef = useRef(1)
 
   const set = useCallback((patch: Partial<PlayerState>) => {
     if (mountedRef.current) setState((s) => ({ ...s, ...patch }))
   }, [])
 
-  const clearPoll = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
+  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (!mountedRef.current) return
+    if (status.isLoaded) {
+      set({
+        position: status.positionMillis ?? 0,
+        duration: status.durationMillis ?? 0,
+        playing: status.isPlaying,
+      })
+      if (status.didJustFinish && !status.isLooping) {
+        set({ playing: false, position: 0 })
+      }
     }
-  }
-
-  const poll = () => {
-    clearPoll()
-    pollRef.current = setInterval(async () => {
-      const s = soundRef.current
-      if (!s) return
-      try {
-        const status = await s.getStatusAsync()
-        if (status.isLoaded) {
-          set({
-            position: status.positionMillis ?? 0,
-            duration: status.durationMillis ?? 0,
-            playing: status.shouldPlay && !status.isBuffering,
-          })
-        }
-      } catch {}
-    }, 500)
-  }
+  }, [set])
 
   const unload = async () => {
-    clearPoll()
     if (soundRef.current) {
-      try { await soundRef.current.unloadAsync() } catch {}
+      const s = soundRef.current
       soundRef.current = null
+      try {
+        await s.stopAsync()
+        await s.unloadAsync()
+      } catch {}
     }
   }
 
   const load = async (track: AudioTrack) => {
     await unload()
-    set({ track, position: 0, duration: 0, playing: false })
+    const isAmbient = track.kind === 'preset'
+    set({ track, position: 0, duration: 0, playing: false, isAmbient })
 
-    if (track.kind === 'preset') {
-      // Ambient presets are generated live via the Web Audio API on web.
-      // On native there is no generator, so they are a no-op here.
-      set({ isAmbient: true })
-      return
-    }
-
-    if (!track.uri) return
-    set({ isAmbient: false })
     try {
+      let source: any = null
+      if (isAmbient && track.presetId) {
+        source = ambient.PRESET_AUDIO_SOURCES[track.presetId as ambient.SoundType]
+      } else if (track.uri) {
+        source = { uri: track.uri }
+      }
+
+      if (!source) return
+
       const { sound, status } = await Audio.Sound.createAsync(
-        { uri: track.uri },
-        { shouldPlay: false, volume: state.volume, isLooping: loopingRef.current }
+        source,
+        {
+          shouldPlay: true,
+          volume: volumeRef.current,
+          isLooping: loopingRef.current,
+        },
+        onPlaybackStatusUpdate
       )
+
       soundRef.current = sound
       if (status.isLoaded) {
-        set({ duration: status.durationMillis ?? 0 })
+        set({
+          duration: status.durationMillis ?? 0,
+          position: status.positionMillis ?? 0,
+          playing: status.isPlaying,
+        })
       }
     } catch (e: any) {
-      Alert.alert('Could not play track', e?.message ?? 'Unknown error')
-      set({ track: null })
+      Alert.alert('Playback error', e?.message ?? 'Could not play audio track')
+      set({ track: null, playing: false })
     }
   }
 
   const toggle = async () => {
-    const t = state.track
-    if (!t) return
-    if (t.kind === 'preset') {
-      if (state.playing) {
-        ambient.stopAmbient()
-        set({ playing: false })
-      } else {
-        ambient.startAmbient(t.presetId!)
-        set({ playing: true })
-      }
+    const s = soundRef.current
+    if (!s) {
+      if (state.track) await load(state.track)
       return
     }
-    const s = soundRef.current
-    if (!s) return
     try {
       if (state.playing) {
         await s.pauseAsync()
@@ -117,10 +111,9 @@ export function useAudioPlayer() {
       } else {
         await s.playAsync()
         set({ playing: true })
-        poll()
       }
     } catch (e: any) {
-      Alert.alert('Playback error', e?.message ?? 'Unknown error')
+      Alert.alert('Playback error', e?.message ?? 'Could not toggle playback')
     }
   }
 
@@ -128,7 +121,7 @@ export function useAudioPlayer() {
     const s = soundRef.current
     if (!s) return
     try {
-      await s.setStatusAsync({ positionMillis })
+      await s.setPositionAsync(positionMillis)
       set({ position: positionMillis })
     } catch {}
   }
@@ -138,23 +131,25 @@ export function useAudioPlayer() {
     set({ looping })
     const s = soundRef.current
     if (s) {
-      try { await s.setStatusAsync({ isLooping: looping }) } catch {}
+      try {
+        await s.setIsLoopingAsync(looping)
+      } catch {}
     }
   }
 
   const setVolume = async (volume: number) => {
-    set({ volume })
+    const clamped = Math.max(0, Math.min(1, volume))
+    volumeRef.current = clamped
+    set({ volume: clamped })
     const s = soundRef.current
     if (s) {
-      try { await s.setVolumeAsync(volume) } catch {}
+      try {
+        await s.setVolumeAsync(clamped)
+      } catch {}
     }
-    if (state.isAmbient) ambient.setAmbientVolume(volume)
   }
 
   const stop = async () => {
-    if (state.track?.kind === 'preset') {
-      ambient.stopAmbient()
-    }
     await unload()
     set({ track: null, playing: false, position: 0, duration: 0, isAmbient: false })
   }
@@ -163,7 +158,6 @@ export function useAudioPlayer() {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      clearPoll()
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {})
       }
