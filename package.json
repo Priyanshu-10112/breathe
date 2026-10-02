@@ -7,7 +7,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.26",
-    "expo-av": "^16.0.8",
+    "expo-audio": "~57.0.5",
     "expo-constants": "^57.0.19",
     "expo-dev-client": "~57.0.19",
     "expo-document-picker": "~57.0.3",
@@ -42,11 +42,7 @@
   "private": true,
   "expo": {
     "doctor": {
-      "reactNativeDirectoryCheck": {
-        "exclude": [
-          "expo-av"
-        ]
-      }
+      "reactNativeDirectoryCheck": {}
     }
   }
 }

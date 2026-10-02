@@ -35,6 +35,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# editors
+.vscode/
+
 # local env files
 .env*
 !.env.example

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
-import { Audio } from 'expo-av'
+import { setAudioModeAsync } from 'expo-audio'
 import { useAudioPlayer } from '../../audio/player'
 import { PRESETS } from '../../audio/ambient'
 import { readAudioLibrary, addAudioTrack, removeAudioTrack, AudioTrack } from '../../data/storage'
@@ -23,10 +23,10 @@ export default function AudioScreen() {
       if (isMounted) setLibrary(tracks)
     })
 
-    Audio.setAudioModeAsync({
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: 0,
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'mixWithOthers',
     }).catch(() => {})
 
     return () => {

@@ -2,15 +2,15 @@ import { Stack } from 'expo-router'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useEffect } from 'react'
-import { Audio } from 'expo-av'
+import { setAudioModeAsync } from 'expo-audio'
 import { ThemeProvider } from '../theme'
 
 export default function RootLayout() {
   useEffect(() => {
     // Allow audio to play even when the phone is on silent/vibrate.
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: 0, // MixWithOthers
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
     }).catch(() => {})
   }, [])
 

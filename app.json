@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "breathe",
     "ios": {
       "supportsTablet": true
     },
@@ -31,9 +32,9 @@
     },
     "plugins": [
       "expo-router",
-      "expo-av",
       "expo-document-picker",
-      "expo-file-system"
+      "expo-file-system",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

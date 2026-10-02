@@ -1,72 +1,62 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Audio, AVPlaybackStatus } from 'expo-av'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  useAudioPlayer as useExpoAudioPlayer,
+  useAudioPlayerStatus,
+  setAudioModeAsync,
+  type AudioPlayer,
+} from 'expo-audio'
 import { Alert } from 'react-native'
 import * as ambient from './ambient'
 import type { AudioTrack } from '../data/storage'
 
 type PlayerState = {
   track: AudioTrack | null
-  playing: boolean
-  position: number // ms
-  duration: number // ms
   volume: number
   looping: boolean
-  isAmbient: boolean
 }
 
+/**
+ * Wraps expo-audio's useAudioPlayer into the same API shape the UI expects.
+ * Position/duration come from useAudioPlayerStatus (in seconds → converted to ms).
+ */
 export function useAudioPlayer() {
   const [state, setState] = useState<PlayerState>({
     track: null,
-    playing: false,
-    position: 0,
-    duration: 0,
     volume: 1,
     looping: true,
-    isAmbient: false,
   })
 
-  const soundRef = useRef<Audio.Sound | null>(null)
-  const mountedRef = useRef(true)
-  const loopingRef = useRef(true)
-  const volumeRef = useRef(1)
-
   const set = useCallback((patch: Partial<PlayerState>) => {
-    if (mountedRef.current) setState((s) => ({ ...s, ...patch }))
+    setState((s) => ({ ...s, ...patch }))
   }, [])
 
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!mountedRef.current) return
-    if (status.isLoaded) {
-      set({
-        position: status.positionMillis ?? 0,
-        duration: status.durationMillis ?? 0,
-        playing: status.isPlaying,
-      })
-      if (status.didJustFinish && !status.isLooping) {
-        set({ playing: false, position: 0 })
-      }
-    }
-  }, [set])
+  // Single persistent player, source swapped via player.replace()
+  const player: AudioPlayer = useExpoAudioPlayer(null, { updateInterval: 250 })
+  const status = useAudioPlayerStatus(player)
 
-  const unload = async () => {
-    if (soundRef.current) {
-      const s = soundRef.current
-      soundRef.current = null
-      try {
-        await s.stopAsync()
-        await s.unloadAsync()
-      } catch {}
-    }
-  }
+  // Sync volume whenever it changes
+  useEffect(() => {
+    player.volume = state.volume
+  }, [state.volume, player])
 
-  const load = async (track: AudioTrack) => {
-    await unload()
-    const isAmbient = track.kind === 'preset'
-    set({ track, position: 0, duration: 0, playing: false, isAmbient })
+  // Sync loop whenever it changes
+  useEffect(() => {
+    player.loop = state.looping
+  }, [state.looping, player])
 
+  // Configure audio session once on mount
+  useEffect(() => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'mixWithOthers',
+    }).catch(() => {})
+  }, [])
+
+  const load = useCallback(async (track: AudioTrack): Promise<void> => {
     try {
       let source: any = null
-      if (isAmbient && track.presetId) {
+      if (track.kind === 'preset' && track.presetId) {
         source = ambient.PRESET_AUDIO_SOURCES[track.presetId as ambient.SoundType]
       } else if (track.uri) {
         source = { uri: track.uri }
@@ -74,95 +64,60 @@ export function useAudioPlayer() {
 
       if (!source) return
 
-      const { sound, status } = await Audio.Sound.createAsync(
-        source,
-        {
-          shouldPlay: true,
-          volume: volumeRef.current,
-          isLooping: loopingRef.current,
-        },
-        onPlaybackStatusUpdate
-      )
+      // replace() swaps the audio source and player continues from the new source
+      player.replace(source)
+      player.loop = state.looping
+      player.volume = state.volume
+      player.play()
 
-      soundRef.current = sound
-      if (status.isLoaded) {
-        set({
-          duration: status.durationMillis ?? 0,
-          position: status.positionMillis ?? 0,
-          playing: status.isPlaying,
-        })
-      }
+      set({ track })
     } catch (e: any) {
       Alert.alert('Playback error', e?.message ?? 'Could not play audio track')
-      set({ track: null, playing: false })
     }
-  }
+  }, [player, state.looping, state.volume, set])
 
-  const toggle = async () => {
-    const s = soundRef.current
-    if (!s) {
-      if (state.track) await load(state.track)
-      return
+  const toggle = useCallback(async (): Promise<void> => {
+    if (!state.track) return
+    if (status.playing) {
+      player.pause()
+    } else {
+      player.play()
     }
-    try {
-      if (state.playing) {
-        await s.pauseAsync()
-        set({ playing: false })
-      } else {
-        await s.playAsync()
-        set({ playing: true })
-      }
-    } catch (e: any) {
-      Alert.alert('Playback error', e?.message ?? 'Could not toggle playback')
-    }
-  }
+  }, [player, state.track, status.playing])
 
-  const seek = async (positionMillis: number) => {
-    const s = soundRef.current
-    if (!s) return
+  const seek = useCallback(async (positionMillis: number): Promise<void> => {
     try {
-      await s.setPositionAsync(positionMillis)
-      set({ position: positionMillis })
+      await player.seekTo(positionMillis / 1000) // expo-audio works in seconds
     } catch {}
-  }
+  }, [player])
 
-  const setLooping = async (looping: boolean) => {
-    loopingRef.current = looping
+  const setLooping = useCallback((looping: boolean): void => {
+    player.loop = looping
     set({ looping })
-    const s = soundRef.current
-    if (s) {
-      try {
-        await s.setIsLoopingAsync(looping)
-      } catch {}
-    }
-  }
+  }, [player, set])
 
-  const setVolume = async (volume: number) => {
+  const setVolume = useCallback((volume: number): void => {
     const clamped = Math.max(0, Math.min(1, volume))
-    volumeRef.current = clamped
+    player.volume = clamped
     set({ volume: clamped })
-    const s = soundRef.current
-    if (s) {
-      try {
-        await s.setVolumeAsync(clamped)
-      } catch {}
-    }
+  }, [player, set])
+
+  const stop = useCallback(async (): Promise<void> => {
+    player.pause()
+    try { await player.seekTo(0) } catch {}
+    set({ track: null })
+  }, [player, set])
+
+  // Expose unified state — UI uses milliseconds for position/duration
+  const combinedState = {
+    track: state.track,
+    playing: status.playing,
+    position: (status.currentTime ?? 0) * 1000,
+    duration: (status.duration ?? 0) * 1000,
+    volume: state.volume,
+    looping: state.looping,
+    isAmbient: state.track?.kind === 'preset',
   }
 
-  const stop = async () => {
-    await unload()
-    set({ track: null, playing: false, position: 0, duration: 0, isAmbient: false })
-  }
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {})
-      }
-    }
-  }, [])
-
-  return { state, load, toggle, seek, setLooping, setVolume, stop }
+  return { state: combinedState, load, toggle, seek, setLooping, setVolume, stop }
 }
