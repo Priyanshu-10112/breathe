@@ -5,6 +5,7 @@ const KEYS = {
   audio: 'breathe_audio_tracks',
   drawings: 'breathe_drawing_index',
   settings: 'breathe_settings',
+  room: 'breathe_drawing_room',
 } as const
 
 type Key = keyof typeof KEYS
@@ -79,6 +80,37 @@ export async function upsertDrawingPage(page: DrawingPage): Promise<void> {
 export async function deleteDrawingPage(id: string): Promise<void> {
   const idx = await readDrawingIndex()
   await writeDrawingIndex({ pages: idx.pages.filter((p) => p.id !== id) })
+}
+
+// --- Drawing Room ---------------------------------------------------------
+export type PageLocation = 'canvas' | 'floor' | 'bin'
+
+export type RoomPage = {
+  id: string
+  strokes: DrawingStroke[]
+  createdAt: number
+  updatedAt: number
+  floorX: number
+  floorY: number
+  floorRotation: number
+  location: PageLocation
+  name?: string
+}
+
+export type DrawingRoom = {
+  pages: RoomPage[]
+  binCapacity: number
+}
+
+const ROOM_KEY = KEYS.room
+export const BIN_CAPACITY = 10
+
+export async function readDrawingRoom(): Promise<DrawingRoom> {
+  return readJson<DrawingRoom>(ROOM_KEY, { pages: [], binCapacity: BIN_CAPACITY })
+}
+
+export async function writeDrawingRoom(room: DrawingRoom): Promise<void> {
+  await writeJson(ROOM_KEY, room)
 }
 
 // --- Audio library ---------------------------------------------------------

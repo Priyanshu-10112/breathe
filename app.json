@@ -34,7 +34,8 @@
       "expo-router",
       "expo-document-picker",
       "expo-file-system",
-      "expo-audio"
+      "expo-audio",
+      "expo-media-library"
     ],
     "experiments": {
       "typedRoutes": true
