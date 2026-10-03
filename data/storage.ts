@@ -118,16 +118,21 @@ export type AudioTrack = {
   id: string
   name: string
   kind: 'preset' | 'upload'
-  presetId?: 'rain' | 'waves' | 'bowl'
+  presetId?: 'rain' | 'waves' | 'bowl' | 'forest' | 'wind' | 'fire' | 'stream' | 'crickets'
   uri?: string
   emoji: string
   createdAt: number
 }
 
 export const DEFAULT_PRESET_TRACKS: AudioTrack[] = [
-  { id: 'preset_rain', name: 'Rain', kind: 'preset', presetId: 'rain', emoji: '🌧️', createdAt: 1 },
-  { id: 'preset_waves', name: 'Waves', kind: 'preset', presetId: 'waves', emoji: '🌊', createdAt: 2 },
-  { id: 'preset_bowl', name: 'Singing Bowl', kind: 'preset', presetId: 'bowl', emoji: '🪔', createdAt: 3 },
+  { id: 'preset_rain',     name: 'Rain',           kind: 'preset', presetId: 'rain',     emoji: '🌧️', createdAt: 1 },
+  { id: 'preset_waves',    name: 'Ocean Waves',    kind: 'preset', presetId: 'waves',    emoji: '🌊', createdAt: 2 },
+  { id: 'preset_bowl',     name: 'Singing Bowl',   kind: 'preset', presetId: 'bowl',     emoji: '🪔', createdAt: 3 },
+  { id: 'preset_forest',   name: 'Forest',         kind: 'preset', presetId: 'forest',   emoji: '🌲', createdAt: 4 },
+  { id: 'preset_wind',     name: 'Wind',           kind: 'preset', presetId: 'wind',     emoji: '💨', createdAt: 5 },
+  { id: 'preset_fire',     name: 'Campfire',       kind: 'preset', presetId: 'fire',     emoji: '🔥', createdAt: 6 },
+  { id: 'preset_stream',   name: 'Stream',         kind: 'preset', presetId: 'stream',   emoji: '💧', createdAt: 7 },
+  { id: 'preset_crickets', name: 'Night Crickets', kind: 'preset', presetId: 'crickets', emoji: '🦗', createdAt: 8 },
 ]
 
 export async function readAudioLibrary(): Promise<AudioTrack[]> {
