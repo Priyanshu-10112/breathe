@@ -158,6 +158,7 @@ Each `RoomPage` stores:
 ---
 
 ## 🔒 Permissions
+(required due to user uploads)
 
 | Permission | Purpose |
 |---|---|
