@@ -50,8 +50,9 @@ import Animated, {
   withSequence,
   runOnJS,
   interpolate,
+  useDerivedValue,
 } from 'react-native-reanimated'
-import { Canvas, Path, Skia, useCanvasRef } from '@shopify/react-native-skia'
+import { Canvas, Path, Group, Skia, useCanvasRef } from '@shopify/react-native-skia'
 import * as MediaLibrary from 'expo-media-library/legacy'
 import { Paths, EncodingType } from 'expo-file-system'
 import { writeAsStringAsync } from 'expo-file-system/legacy'
@@ -80,6 +81,9 @@ const BIN_HIT_RADIUS = 56
 
 const MIN_BRUSH = 2
 const MAX_BRUSH = 40
+
+const MIN_ZOOM = 1
+const MAX_ZOOM = 4
 
 const PALETTE = [
   '#2b2622', // Ink (default)
@@ -492,18 +496,11 @@ type FloorBallProps = {
   onDropToBin: (id: string) => void
 }
 
-function FloorBall({ page, onDropToCanvas, onDropToBin }: FloorBallProps) {
+const FloorBall = React.memo(function FloorBall({ page, onDropToCanvas, onDropToBin }: FloorBallProps) {
   const tx = useSharedValue(page.floorX)
   const ty = useSharedValue(page.floorY)
-  // Start small, animate to full size — no useEffect needed
-  const scale = useSharedValue(0.1)
+  const scale = useSharedValue(1)  // no popup animation
   const rot = useSharedValue(page.floorRotation)
-
-  // Trigger entry animation immediately on first render via shared value initializer trick
-  scale.value = withSequence(
-    withTiming(1.3, { duration: 140 }),
-    withSpring(1, { damping: 8 })
-  )
 
   const startX = useSharedValue(page.floorX)
   const startY = useSharedValue(page.floorY)
@@ -561,7 +558,7 @@ function FloorBall({ page, onDropToCanvas, onDropToBin }: FloorBallProps) {
       </Animated.View>
     </GestureDetector>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Dustbin
@@ -686,10 +683,37 @@ export default function DrawScreen() {
   const [showBrushSlider, setShowBrushSlider] = useState(false)
   const [showNameModal, setShowNameModal] = useState(false)
   const [nameInput, setNameInput] = useState('')
+  const [canRedo, setCanRedo] = useState(false)
+
+  // Redo stack — stores strokes popped by undo, cleared on new stroke drawn
+  const redoStack = useRef<DrawingStroke[]>([])
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [pickerHex, setPickerHex] = useState('#ff0000')
 
   const brushSliderWidth = useRef(200)
+
+  // ---------------------------------------------------------------------------
+  // Zoom & Pan — handled inside Skia Group (crisp, no pixel blur)
+  // Min scale = 1 (zoom-out max), Max scale = 4
+  // ---------------------------------------------------------------------------
+  const canvasScale = useSharedValue(1)
+  const savedScale = useSharedValue(1)
+  const canvasOffsetX = useSharedValue(0)
+  const canvasOffsetY = useSharedValue(0)
+  const savedOffsetX = useSharedValue(0)
+  const savedOffsetY = useSharedValue(0)
+
+  // JS-readable refs so drawing gesture can convert coords
+  const scaleRef = useRef(1)
+  const offsetXRef = useRef(0)
+  const offsetYRef = useRef(0)
+
+  // runOnJS callbacks — must be stable refs, not inline lambdas
+  const updateScaleRef = useCallback((s: number) => { scaleRef.current = s }, [])
+  const updateOffsetRef = useCallback((x: number, y: number) => {
+    offsetXRef.current = x
+    offsetYRef.current = y
+  }, [])
 
   const canvasRef = useCanvasRef()
 
@@ -770,13 +794,18 @@ export default function DrawScreen() {
   // ---------------------------------------------------------------------------
   const canvasGesture = Gesture.Pan()
     .runOnJS(true)
+    .minPointers(1)
+    .maxPointers(1)
     .onBegin((e) => {
       if (tearModeRef.current) {
         tearVisibleRef.current.value = withTiming(1, { duration: 150 })
         return
       }
-      liveRef.current = [{ x: e.x, y: e.y }]
-      setLivePoints([{ x: e.x, y: e.y }])
+      // Convert screen coords → canvas coords
+      const cx = (e.x - offsetXRef.current) / scaleRef.current
+      const cy = (e.y - offsetYRef.current) / scaleRef.current
+      liveRef.current = [{ x: cx, y: cy }]
+      setLivePoints([{ x: cx, y: cy }])
       setIsDrawing(true)
     })
     .onUpdate((e) => {
@@ -785,7 +814,9 @@ export default function DrawScreen() {
         tearProgressRef.current.value = Math.min(1, drag / 100)
         return
       }
-      liveRef.current.push({ x: e.x, y: e.y })
+      const cx = (e.x - offsetXRef.current) / scaleRef.current
+      const cy = (e.y - offsetYRef.current) / scaleRef.current
+      liveRef.current.push({ x: cx, y: cy })
       if (liveRef.current.length % 2 === 0) {
         setLivePoints([...liveRef.current])
       }
@@ -811,7 +842,8 @@ export default function DrawScreen() {
         id: makeStrokeId(),
         points: pts,
         color: colorRef.current,
-        size: sizeRef.current,
+        // Store size in canvas-space (size / scale) so it looks same on screen
+        size: sizeRef.current / scaleRef.current,
         opacity: 1,
       }
 
@@ -826,7 +858,56 @@ export default function DrawScreen() {
         persist(next)
         return next
       })
+      // New stroke clears redo history
+      redoStack.current = []
+      setCanRedo(false)
     })
+
+  // Pinch-to-zoom — runs on UI thread, crisp Skia rendering
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      'worklet'
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, savedScale.value * e.scale))
+      canvasScale.value = next
+      runOnJS(updateScaleRef)(next)
+    })
+    .onEnd(() => {
+      'worklet'
+      savedScale.value = canvasScale.value
+    })
+
+  // 2-finger pan — move canvas after zooming in
+  const panGesture = Gesture.Pan()
+    .runOnJS(false)
+    .minPointers(2)
+    .maxPointers(2)
+    .onUpdate((e) => {
+      'worklet'
+      const scale = canvasScale.value
+      // Clamp pan so canvas doesn't fly too far out of view
+      const maxX = CANVAS_W * (scale - 1)
+      const maxY = CANVAS_H * (scale - 1)
+      const nx = Math.max(-maxX, Math.min(0, savedOffsetX.value + e.translationX))
+      const ny = Math.max(-maxY, Math.min(0, savedOffsetY.value + e.translationY))
+      canvasOffsetX.value = nx
+      canvasOffsetY.value = ny
+      runOnJS(updateOffsetRef)(nx, ny)
+    })
+    .onEnd(() => {
+      'worklet'
+      savedOffsetX.value = canvasOffsetX.value
+      savedOffsetY.value = canvasOffsetY.value
+    })
+
+  // Combine all three — simultaneous
+  const combinedCanvasGesture = Gesture.Simultaneous(canvasGesture, pinchGesture, panGesture)
+
+  // Skia Group transform derived from SharedValues — runs on UI thread, zero lag
+  const skiaGroupTransform = useDerivedValue(() => [
+    { translateX: canvasOffsetX.value },
+    { translateY: canvasOffsetY.value },
+    { scale: canvasScale.value },
+  ])
 
   // ---------------------------------------------------------------------------
   // Floor ball interactions
@@ -921,11 +1002,34 @@ export default function DrawScreen() {
   // Undo last stroke on canvas
   const handleUndo = useCallback(() => {
     setRoom((prev) => {
+      const canvasPg = prev.pages.find((p) => p.location === 'canvas')
+      if (!canvasPg || canvasPg.strokes.length === 0) return prev
+      const popped = canvasPg.strokes[canvasPg.strokes.length - 1]
+      redoStack.current.push(popped)
+      setCanRedo(true)
       const next: DrawingRoom = {
         ...prev,
         pages: prev.pages.map((p) => {
           if (p.location !== 'canvas') return p
           return { ...p, strokes: p.strokes.slice(0, -1), updatedAt: Date.now() }
+        }),
+      }
+      persist(next)
+      return next
+    })
+  }, [persist])
+
+  // Redo last undone stroke
+  const handleRedo = useCallback(() => {
+    if (redoStack.current.length === 0) return
+    const stroke = redoStack.current.pop()!
+    if (redoStack.current.length === 0) setCanRedo(false)
+    setRoom((prev) => {
+      const next: DrawingRoom = {
+        ...prev,
+        pages: prev.pages.map((p) => {
+          if (p.location !== 'canvas') return p
+          return { ...p, strokes: [...p.strokes, stroke], updatedAt: Date.now() }
         }),
       }
       persist(next)
@@ -1106,6 +1210,13 @@ export default function DrawScreen() {
                   <Text style={styles.actionTxt}>↩</Text>
                 </Pressable>
                 <Pressable
+                  onPress={handleRedo}
+                  disabled={!canRedo}
+                  style={[styles.actionBtn, !canRedo && styles.btnDisabled]}
+                >
+                  <Text style={styles.actionTxt}>↪</Text>
+                </Pressable>
+                <Pressable
                   onPress={() => {
                     setNameInput(canvasPage?.name ?? '')
                     setShowNameModal(true)
@@ -1147,32 +1258,38 @@ export default function DrawScreen() {
               <Text style={styles.tearHint}>↓ Drag down to tear page off</Text>
             </Animated.View>
 
-            {/* Single GestureDetector handles both drawing and tear */}
-            <GestureDetector gesture={canvasGesture}>
+            {/* Single GestureDetector handles drawing, tear, and pinch-to-zoom */}
+            <GestureDetector gesture={combinedCanvasGesture}>
               <View style={styles.canvasArea}>
                 <Canvas ref={canvasRef} style={StyleSheet.absoluteFill}>
-                  {canvasPage?.strokes.map((s) => (
-                    <Path
-                      key={s.id}
-                      path={buildPath(s.points)}
-                      color={s.color}
-                      style="stroke"
-                      strokeWidth={s.size}
-                      strokeCap="round"
-                      strokeJoin="round"
-                      opacity={s.opacity}
-                    />
-                  ))}
-                  {isDrawing && livePoints.length > 0 && (
-                    <Path
-                      path={buildPath(livePoints)}
-                      color={activeColor}
-                      style="stroke"
-                      strokeWidth={activeSize}
-                      strokeCap="round"
-                      strokeJoin="round"
-                    />
-                  )}
+                  {/* All strokes live inside a Group driven by zoom/pan SharedValues */}
+                  {/* Skia accepts SharedValue<number> directly — GPU-thread, no pixel blur */}
+                  <Group
+                    transform={skiaGroupTransform}
+                  >
+                    {canvasPage?.strokes.map((s) => (
+                      <Path
+                        key={s.id}
+                        path={buildPath(s.points)}
+                        color={s.color}
+                        style="stroke"
+                        strokeWidth={s.size}
+                        strokeCap="round"
+                        strokeJoin="round"
+                        opacity={s.opacity}
+                      />
+                    ))}
+                    {isDrawing && livePoints.length > 0 && (
+                      <Path
+                        path={buildPath(livePoints)}
+                        color={activeColor}
+                        style="stroke"
+                        strokeWidth={activeSize / scaleRef.current}
+                        strokeCap="round"
+                        strokeJoin="round"
+                      />
+                    )}
+                  </Group>
                 </Canvas>
 
                 {/* Empty canvas hint */}

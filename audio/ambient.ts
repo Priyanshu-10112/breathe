@@ -26,11 +26,11 @@ export const PRESET_AUDIO_SOURCES: Record<SoundType, any> = {
   rain:     require('../assets/audio/rain.wav'),
   waves:    require('../assets/audio/waves.wav'),
   bowl:     require('../assets/audio/bowl.wav'),
-  forest:   require('../assets/audio/rain.wav'),    // fallback on native — same file, different synth on web
-  wind:     require('../assets/audio/waves.wav'),
-  fire:     require('../assets/audio/rain.wav'),
-  stream:   require('../assets/audio/waves.wav'),
-  crickets: require('../assets/audio/bowl.wav'),
+  forest:   require('../assets/audio/forest.wav'),
+  wind:     require('../assets/audio/wind.wav'),
+  fire:     require('../assets/audio/fire.wav'),
+  stream:   require('../assets/audio/stream.wav'),
+  crickets: require('../assets/audio/crickets.wav'),
 }
 
 // ---------------------------------------------------------------------------
